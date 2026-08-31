@@ -17,12 +17,29 @@
 </head>
 <body>
   <div id="root">
-    <div style="text-align:center;padding:60px;font-family:system-ui;color:#6b7280">
+    <div id="loading" style="text-align:center;padding:60px;font-family:system-ui;color:#6b7280">
       Loading SiteSense…
     </div>
   </div>
 
+  <!-- Detect CDN load failures immediately -->
+  <script>
+    window.onerror = function(msg, src, line) {
+      document.getElementById('loading').innerHTML =
+        '<b style="color:red">JS Error:</b> ' + msg + '<br><small>' + src + ':' + line + '</small>';
+    };
+    function checkLib(name, val) {
+      if (!val) document.getElementById('loading').innerHTML =
+        '<b style="color:red">Failed to load: ' + name + '</b><br>Check your internet connection.';
+    }
+  </script>
+
   <script type="text/babel">
+    // Verify all CDN libs loaded before doing anything
+    checkLib('React',    typeof React !== 'undefined'    && React);
+    checkLib('ReactDOM', typeof ReactDOM !== 'undefined' && ReactDOM);
+    checkLib('Recharts', typeof Recharts !== 'undefined' && Recharts);
+
     /* ── api.js ──────────────────────────────────────────────────────────── */
     const BASE_URL = "http://localhost:8000";
 
