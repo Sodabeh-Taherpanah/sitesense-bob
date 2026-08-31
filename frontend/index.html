@@ -9,11 +9,12 @@
     body { background: #f3f4f6; font-family: -apple-system, "Segoe UI", system-ui, sans-serif; }
   </style>
 
-  <!-- Pin exact versions to avoid CDN redirect failures -->
-  <script src="https://unpkg.com/react@18.2.0/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js" crossorigin></script>
-  <script src="https://unpkg.com/recharts@2.15.4/umd/Recharts.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone@7.23.3/babel.min.js"></script>
+  <!-- jsdelivr: no redirects, widely unblocked -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js" crossorigin></script>
+  <!-- Recharts depends on React being global before it loads -->
+  <script src="https://cdn.jsdelivr.net/npm/recharts@2.15.4/umd/Recharts.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.3/babel.min.js" crossorigin></script>
 </head>
 <body>
   <div id="root">
@@ -34,8 +35,8 @@
     }
   </script>
 
-  <script type="text/babel">
-    // Verify all CDN libs loaded before doing anything
+  <!-- data-type="module" makes Babel wait for DOM ready before executing -->
+  <script type="text/babel" data-type="module">
     checkLib('React',    typeof React !== 'undefined'    && React);
     checkLib('ReactDOM', typeof ReactDOM !== 'undefined' && ReactDOM);
     checkLib('Recharts', typeof Recharts !== 'undefined' && Recharts);
