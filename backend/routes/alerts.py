@@ -20,7 +20,7 @@ def get_alerts(db: Session = Depends(get_db)):
     latest_ids = (
         db.query(func.max(SensorReading.id))
         .group_by(SensorReading.zone_id)
-        .subquery()
+        .scalar_subquery()
     )
     readings = db.query(SensorReading).filter(SensorReading.id.in_(latest_ids)).all()
 
