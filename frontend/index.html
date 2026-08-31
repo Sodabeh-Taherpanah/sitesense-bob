@@ -8,13 +8,6 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #f3f4f6; font-family: -apple-system, "Segoe UI", system-ui, sans-serif; }
   </style>
-
-  <!-- jsdelivr: no redirects, widely unblocked -->
-  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js" crossorigin></script>
-  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js" crossorigin></script>
-  <!-- Recharts depends on React being global before it loads -->
-  <script src="https://cdn.jsdelivr.net/npm/recharts@2.15.4/umd/Recharts.js" crossorigin></script>
-  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.3/babel.min.js" crossorigin></script>
 </head>
 <body>
   <div id="root">
@@ -23,94 +16,93 @@
     </div>
   </div>
 
-  <!-- Detect CDN load failures immediately -->
+  <!--
+    Load order matters:
+    1. React (peer dep for Recharts)
+    2. ReactDOM
+    3. Recharts (needs React global)
+    4. Babel LAST — it immediately scans and executes type="text/babel" blocks,
+       so all globals must exist before Babel loads.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/recharts@2.15.4/umd/Recharts.js"></script>
+
+  <!-- Guard: show error if any CDN script failed before Babel runs -->
   <script>
-    window.onerror = function(msg, src, line) {
-      document.getElementById('loading').innerHTML =
-        '<b style="color:red">JS Error:</b> ' + msg + '<br><small>' + src + ':' + line + '</small>';
-    };
-    function checkLib(name, val) {
-      if (!val) document.getElementById('loading').innerHTML =
-        '<b style="color:red">Failed to load: ' + name + '</b><br>Check your internet connection.';
-    }
+    (function() {
+      var missing = [];
+      if (typeof React === 'undefined')    missing.push('React');
+      if (typeof ReactDOM === 'undefined') missing.push('ReactDOM');
+      if (typeof Recharts === 'undefined') missing.push('Recharts');
+      if (missing.length) {
+        document.getElementById('loading').innerHTML =
+          '<b style="color:red">Failed to load: ' + missing.join(', ') + '</b>' +
+          '<br><small>Check your internet connection and refresh.</small>';
+        throw new Error('Missing CDN deps: ' + missing.join(', '));
+      }
+    })();
   </script>
 
-  <!-- data-type="module" makes Babel wait for DOM ready before executing -->
-  <script type="text/babel" data-type="module">
-    checkLib('React',    typeof React !== 'undefined'    && React);
-    checkLib('ReactDOM', typeof ReactDOM !== 'undefined' && ReactDOM);
-    checkLib('Recharts', typeof Recharts !== 'undefined' && Recharts);
-
-    /* ── api.js ──────────────────────────────────────────────────────────── */
+  <!-- App code: Babel is loaded inline via the script below so it runs AFTER the guard -->
+  <script id="app-source" type="text/plain">
     const BASE_URL = "http://localhost:8000";
 
     async function fetchJSON(path) {
-      const res = await fetch(`${BASE_URL}${path}`);
-      if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+      const res = await fetch(BASE_URL + path);
+      if (!res.ok) throw new Error('GET ' + path + ' failed: ' + res.status);
       return res.json();
     }
 
     const api = {
-      getZones:   () => fetchJSON("/zones"),
-      getAlerts:  () => fetchJSON("/alerts"),
-      getHistory: (zoneId) => fetchJSON(`/zones/${encodeURIComponent(zoneId)}/history`),
+      getZones:   function() { return fetchJSON('/zones'); },
+      getAlerts:  function() { return fetchJSON('/alerts'); },
+      getHistory: function(id) { return fetchJSON('/zones/' + encodeURIComponent(id) + '/history'); },
     };
 
-    /* ── ZoneCard ────────────────────────────────────────────────────────── */
-    function ZoneCard({ zone, onClick, selected }) {
-      const STATUS_CONFIG = {
-        ok:       { color: "#22c55e", label: "OK",       bg: "#f0fdf4" },
-        warning:  { color: "#f59e0b", label: "WARNING",  bg: "#fffbeb" },
-        critical: { color: "#ef4444", label: "CRITICAL", bg: "#fef2f2" },
-      };
-      const cfg = STATUS_CONFIG[zone.status] || STATUS_CONFIG.ok;
-      const ts  = new Date(zone.timestamp).toLocaleTimeString();
+    const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+            ReferenceLine, ResponsiveContainer } = Recharts;
+    const { useState, useEffect, useCallback } = React;
 
+    function ZoneCard({ zone, onClick, selected }) {
+      const STATUS = {
+        ok:       { color: '#22c55e', label: 'OK',       bg: '#f0fdf4' },
+        warning:  { color: '#f59e0b', label: 'WARNING',  bg: '#fffbeb' },
+        critical: { color: '#ef4444', label: 'CRITICAL', bg: '#fef2f2' },
+      };
+      const cfg = STATUS[zone.status] || STATUS.ok;
+      const ts  = new Date(zone.timestamp).toLocaleTimeString();
       return (
         <div onClick={onClick} style={{
-          border: `2px solid ${selected ? "#3b82f6" : cfg.color}`,
-          borderRadius: "8px", padding: "16px",
-          background: selected ? "#eff6ff" : cfg.bg,
-          cursor: "pointer",
-          boxShadow: selected ? "0 0 0 3px rgba(59,130,246,0.3)" : "none",
+          border: '2px solid ' + (selected ? '#3b82f6' : cfg.color),
+          borderRadius: '8px', padding: '16px',
+          background: selected ? '#eff6ff' : cfg.bg,
+          cursor: 'pointer',
+          boxShadow: selected ? '0 0 0 3px rgba(59,130,246,0.3)' : 'none',
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong style={{ fontSize: "15px" }}>{zone.zone_id}</strong>
-            <span style={{
-              background: cfg.color, color: "#fff",
-              borderRadius: "4px", padding: "2px 8px",
-              fontSize: "11px", fontWeight: "bold",
-            }}>{cfg.label}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong style={{ fontSize: '15px' }}>{zone.zone_id}</strong>
+            <span style={{ background: cfg.color, color: '#fff', borderRadius: '4px',
+              padding: '2px 8px', fontSize: '11px', fontWeight: 'bold' }}>{cfg.label}</span>
           </div>
-          <div style={{ marginTop: "8px", fontSize: "26px", fontWeight: "bold", color: cfg.color }}>
+          <div style={{ marginTop: '8px', fontSize: '26px', fontWeight: 'bold', color: cfg.color }}>
             {zone.latest_water_level.toFixed(2)} m
           </div>
-          <div style={{ marginTop: "4px", fontSize: "11px", color: "#6b7280" }}>
-            Last update: {ts}
-          </div>
+          <div style={{ marginTop: '4px', fontSize: '11px', color: '#6b7280' }}>Last update: {ts}</div>
         </div>
       );
     }
 
-    /* ── ZoneChart ───────────────────────────────────────────────────────── */
-    const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-            ReferenceLine, ResponsiveContainer } = Recharts;
-
     function ZoneChart({ zoneId, history }) {
       if (!history || history.length === 0) {
-        return (
-          <div style={{ textAlign: "center", color: "#6b7280", padding: "40px 0" }}>
-            No history available for {zoneId}
-          </div>
-        );
+        return <div style={{ textAlign: 'center', color: '#6b7280', padding: '40px 0' }}>No history for {zoneId}</div>;
       }
-      const data = history.map(r => ({
-        time:  new Date(r.timestamp).toLocaleTimeString(),
-        level: r.water_level,
-      }));
+      const data = history.map(function(r) {
+        return { time: new Date(r.timestamp).toLocaleTimeString(), level: r.water_level };
+      });
       return (
         <div>
-          <h3 style={{ margin: "0 0 12px", fontSize: "14px", color: "#374151" }}>
+          <h3 style={{ margin: '0 0 12px', fontSize: '14px', color: '#374151' }}>
             Water Level History — {zoneId}
           </h3>
           <ResponsiveContainer width="100%" height={220}>
@@ -118,58 +110,51 @@
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="time" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis domain={[0, 4]} tick={{ fontSize: 10 }} unit=" m" />
-              <Tooltip formatter={(v) => [`${v.toFixed(3)} m`, "Water Level"]} />
+              <Tooltip formatter={function(v) { return [v.toFixed(3) + ' m', 'Water Level']; }} />
               <ReferenceLine y={2.0} stroke="#f59e0b" strokeDasharray="4 2"
-                label={{ value: "Warning", position: "right", fontSize: 10, fill: "#f59e0b" }} />
+                label={{ value: 'Warning', position: 'right', fontSize: 10, fill: '#f59e0b' }} />
               <ReferenceLine y={2.5} stroke="#ef4444" strokeDasharray="4 2"
-                label={{ value: "Critical", position: "right", fontSize: 10, fill: "#ef4444" }} />
-              <Line type="monotone" dataKey="level" stroke="#3b82f6"
-                dot={false} strokeWidth={2} animationDuration={300} />
+                label={{ value: 'Critical', position: 'right', fontSize: 10, fill: '#ef4444' }} />
+              <Line type="monotone" dataKey="level" stroke="#3b82f6" dot={false} strokeWidth={2} animationDuration={300} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       );
     }
 
-    /* ── AlertList ───────────────────────────────────────────────────────── */
     function AlertList({ alerts }) {
       if (alerts.length === 0) {
         return (
-          <div style={{
-            padding: "12px 16px", background: "#f0fdf4",
-            border: "1px solid #bbf7d0", borderRadius: "6px",
-            color: "#16a34a", fontSize: "13px",
-          }}>
+          <div style={{ padding: '12px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0',
+            borderRadius: '6px', color: '#16a34a', fontSize: '13px' }}>
             ✓ No active alerts — all zones within safe levels.
           </div>
         );
       }
       return (
         <div>
-          {alerts.map(alert => (
-            <div key={alert.zone_id} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "10px 14px", marginBottom: "6px",
-              background: "#fef2f2", border: "1px solid #fecaca",
-              borderLeft: "4px solid #ef4444", borderRadius: "6px",
-            }}>
-              <div>
-                <strong style={{ color: "#dc2626" }}>{alert.zone_id}</strong>
-                <span style={{ marginLeft: "10px", fontSize: "12px", color: "#6b7280" }}>
-                  {new Date(alert.timestamp).toLocaleTimeString()}
+          {alerts.map(function(alert) {
+            return (
+              <div key={alert.zone_id} style={{ display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', padding: '10px 14px', marginBottom: '6px',
+                background: '#fef2f2', border: '1px solid #fecaca',
+                borderLeft: '4px solid #ef4444', borderRadius: '6px' }}>
+                <div>
+                  <strong style={{ color: '#dc2626' }}>{alert.zone_id}</strong>
+                  <span style={{ marginLeft: '10px', fontSize: '12px', color: '#6b7280' }}>
+                    {new Date(alert.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+                <span style={{ fontWeight: 'bold', fontSize: '18px', color: '#dc2626' }}>
+                  {alert.latest_water_level.toFixed(2)} m
                 </span>
               </div>
-              <span style={{ fontWeight: "bold", fontSize: "18px", color: "#dc2626" }}>
-                {alert.latest_water_level.toFixed(2)} m
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       );
     }
 
-    /* ── App (root) ──────────────────────────────────────────────────────── */
-    const { useState, useEffect, useCallback } = React;
     const POLL_INTERVAL = 5000;
 
     function App() {
@@ -180,121 +165,129 @@
       const [lastUpdated,  setLastUpdated]  = useState(null);
       const [error,        setError]        = useState(null);
 
-      const fetchDashboard = useCallback(async () => {
+      const fetchDashboard = useCallback(async function() {
         try {
           const [z, a] = await Promise.all([api.getZones(), api.getAlerts()]);
-          setZones(z);
-          setAlerts(a);
+          setZones(z); setAlerts(a);
           setLastUpdated(new Date().toLocaleTimeString());
           setError(null);
-        } catch {
-          setError("Cannot reach backend — is it running on port 8000?");
+        } catch(e) {
+          setError('Cannot reach backend — is it running on port 8000?');
         }
       }, []);
 
-      const fetchHistory = useCallback(async (zoneId) => {
-        try {
-          setHistory(await api.getHistory(zoneId));
-        } catch {
-          setHistory([]);
-        }
+      const fetchHistory = useCallback(async function(zoneId) {
+        try { setHistory(await api.getHistory(zoneId)); }
+        catch(e) { setHistory([]); }
       }, []);
 
-      useEffect(() => {
+      useEffect(function() {
         fetchDashboard();
         const id = setInterval(fetchDashboard, POLL_INTERVAL);
-        return () => clearInterval(id);
+        return function() { clearInterval(id); };
       }, [fetchDashboard]);
 
-      useEffect(() => {
+      useEffect(function() {
         if (selectedZone) fetchHistory(selectedZone);
       }, [selectedZone, zones, fetchHistory]);
 
-      const handleZoneClick = (zoneId) => {
-        setSelectedZone(prev => prev === zoneId ? null : zoneId);
-      };
-
       const counts = { ok: 0, warning: 0, critical: 0 };
-      zones.forEach(z => { counts[z.status] = (counts[z.status] || 0) + 1; });
+      zones.forEach(function(z) { counts[z.status] = (counts[z.status] || 0) + 1; });
 
       return (
-        <div style={{ maxWidth: "900px", margin: "0 auto", padding: "24px 16px" }}>
-
-          {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <div>
-              <h1 style={{ margin: 0, fontSize: "22px", color: "#1f2328" }}>🏗 SiteSense Dashboard</h1>
-              <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#6b7280" }}>
-                Construction Site Water Level Monitor
-              </p>
+              <h1 style={{ margin: 0, fontSize: '22px', color: '#1f2328' }}>🏗 SiteSense Dashboard</h1>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7280' }}>Construction Site Water Level Monitor</p>
             </div>
-            <div style={{ textAlign: "right", fontSize: "12px", color: "#6b7280" }}>
-              {lastUpdated ? `Updated: ${lastUpdated}` : "Loading…"}
-              <div style={{ marginTop: "4px" }}>
-                <span style={{ marginRight: "10px", color: "#22c55e" }}>● {counts.ok} OK</span>
-                <span style={{ marginRight: "10px", color: "#f59e0b" }}>● {counts.warning} Warning</span>
-                <span style={{ color: "#ef4444" }}>● {counts.critical} Critical</span>
+            <div style={{ textAlign: 'right', fontSize: '12px', color: '#6b7280' }}>
+              {lastUpdated ? 'Updated: ' + lastUpdated : 'Loading…'}
+              <div style={{ marginTop: '4px' }}>
+                <span style={{ marginRight: '10px', color: '#22c55e' }}>● {counts.ok} OK</span>
+                <span style={{ marginRight: '10px', color: '#f59e0b' }}>● {counts.warning} Warning</span>
+                <span style={{ color: '#ef4444' }}>● {counts.critical} Critical</span>
               </div>
             </div>
           </div>
 
-          {/* Error banner */}
           {error && (
-            <div style={{ background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: "6px",
-              padding: "10px 14px", marginBottom: "16px", fontSize: "13px", color: "#92400e" }}>
+            <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px',
+              padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#92400e' }}>
               ⚠ {error}
             </div>
           )}
 
-          {/* Alerts */}
-          <section style={{ marginBottom: "28px" }}>
-            <h2 style={{ fontSize: "13px", fontWeight: "600", color: "#374151",
-              textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>
+          <section style={{ marginBottom: '28px' }}>
+            <h2 style={{ fontSize: '13px', fontWeight: '600', color: '#374151',
+              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
               🚨 Active Alerts
             </h2>
             <AlertList alerts={alerts} />
           </section>
 
-          {/* Zone cards */}
-          <section style={{ marginBottom: "28px" }}>
-            <h2 style={{ fontSize: "13px", fontWeight: "600", color: "#374151",
-              textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>
+          <section style={{ marginBottom: '28px' }}>
+            <h2 style={{ fontSize: '13px', fontWeight: '600', color: '#374151',
+              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
               📡 Zone Status — click a card to see history
             </h2>
             {zones.length === 0 ? (
-              <div style={{ color: "#6b7280", fontSize: "13px", padding: "20px 0" }}>
+              <div style={{ color: '#6b7280', fontSize: '13px', padding: '20px 0' }}>
                 No sensor data yet — start the simulator to populate zones.
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "12px" }}>
-                {zones.map(zone => (
-                  <ZoneCard key={zone.zone_id} zone={zone}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '12px' }}>
+                {zones.map(function(zone) {
+                  return <ZoneCard key={zone.zone_id} zone={zone}
                     selected={selectedZone === zone.zone_id}
-                    onClick={() => handleZoneClick(zone.zone_id)} />
-                ))}
+                    onClick={function() { setSelectedZone(function(p) { return p === zone.zone_id ? null : zone.zone_id; }); }} />;
+                })}
               </div>
             )}
           </section>
 
-          {/* History chart */}
           {selectedZone && (
-            <section style={{
-              background: "#f9fafb", border: "1px solid #e5e7eb",
-              borderRadius: "8px", padding: "20px", marginBottom: "16px",
-            }}>
+            <section style={{ background: '#f9fafb', border: '1px solid #e5e7eb',
+              borderRadius: '8px', padding: '20px', marginBottom: '16px' }}>
               <ZoneChart zoneId={selectedZone} history={history} />
             </section>
           )}
 
-          <footer style={{ textAlign: "center", fontSize: "11px", color: "#9ca3af",
-            borderTop: "1px solid #e5e7eb", paddingTop: "12px", marginTop: "8px" }}>
-            Polling every {POLL_INTERVAL / 1000}s &nbsp;·&nbsp; Warning ≥ 2.0 m · Critical ≥ 2.5 m
+          <footer style={{ textAlign: 'center', fontSize: '11px', color: '#9ca3af',
+            borderTop: '1px solid #e5e7eb', paddingTop: '12px', marginTop: '8px' }}>
+            Polling every {POLL_INTERVAL / 1000}s · Warning ≥ 2.0 m · Critical ≥ 2.5 m
           </footer>
         </div>
       );
     }
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
+
+  <!--
+    Babel loads LAST. When it loads, it immediately finds the type="text/plain"
+    script above, transpiles it, and executes it — by which point React,
+    ReactDOM and Recharts are all already in global scope.
+  -->
+  <script>
+    // Dynamically load Babel then manually trigger transpilation of our app source
+    (function() {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.3/babel.min.js';
+      s.onload = function() {
+        var src = document.getElementById('app-source').textContent;
+        var code = Babel.transform(src, { presets: ['react'] }).code;
+        var script = document.createElement('script');
+        script.textContent = code;
+        document.body.appendChild(script);
+      };
+      s.onerror = function() {
+        document.getElementById('loading').innerHTML =
+          '<b style="color:red">Failed to load Babel from CDN.</b><br><small>Check your internet connection.</small>';
+      };
+      document.body.appendChild(s);
+    })();
+  </script>
+
 </body>
 </html>
