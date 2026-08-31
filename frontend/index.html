@@ -1,3 +1,32 @@
-<!-- index.html -->
-<!-- Single-page app shell. Loads React and Recharts from CDN, then app.js. -->
-<!-- No build step required — open with a static file server or Live Server. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SiteSense Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f3f4f6; font-family: -apple-system, "Segoe UI", system-ui, sans-serif; }
+  </style>
+
+  <!-- React 18 (development build — swap for production .min.js when deploying) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+
+  <!-- Babel (transpiles JSX in-browser — fine for MVP) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Recharts (charts library) -->
+  <script src="https://unpkg.com/recharts@2/umd/Recharts.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Load JS files as Babel-transpiled JSX -->
+  <script type="text/babel" src="api.js"></script>
+  <script type="text/babel" src="components/ZoneCard.jsx"></script>
+  <script type="text/babel" src="components/ZoneChart.jsx"></script>
+  <script type="text/babel" src="components/AlertList.jsx"></script>
+  <script type="text/babel" src="app.js"></script>
+</body>
+</html>
