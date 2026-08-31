@@ -9,14 +9,18 @@
     body { background: #f3f4f6; font-family: -apple-system, "Segoe UI", system-ui, sans-serif; }
   </style>
 
-  <!-- Dependencies must be loaded BEFORE Babel processes the JSX below -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-  <script src="https://unpkg.com/recharts@2/umd/Recharts.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Pin exact versions to avoid CDN redirect failures -->
+  <script src="https://unpkg.com/react@18.2.0/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/recharts@2.15.4/umd/Recharts.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.3/babel.min.js"></script>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <div style="text-align:center;padding:60px;font-family:system-ui;color:#6b7280">
+      Loading SiteSense…
+    </div>
+  </div>
 
   <script type="text/babel">
     /* ── api.js ──────────────────────────────────────────────────────────── */
